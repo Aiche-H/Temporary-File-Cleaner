@@ -32,20 +32,34 @@ void DeleteFilesInFolders(const std::vector<std::string>& folders)
 {
     for (const std::string& folder : folders)
     {
-        for (const auto& entry : std::filesystem::recursive_directory_iterator(folder))
+        try
         {
-            if (entry.is_regular_file())
+            for (const auto& entry : std::filesystem::recursive_directory_iterator(folder))
             {
-                std::error_code ec;
-                std::filesystem::remove(entry.path(), ec);
-                if (!ec)
+                if (entry.is_regular_file())
                 {
-                    std::cout << "Deleted: " << entry.path().string() << std::endl;
+                    std::error_code ec;
+                    std::filesystem::remove(entry.path(), ec);
+                    if (!ec)
+                    {
+                        std::cout << "Deleted: " << entry.path().string() << std::endl;
+                    }
+                    else if (ec.value() == ERROR_SHARING_VIOLATION)
+                    {
+                        std::cout << "Skipped: " << entry.path().string() << " - Access denied" << std::endl;
+                    }
                 }
-                else
-                {
-                    std::cout << "Skipped: " << entry.path().string() << std::endl;
-                }
+            }
+        }
+        catch (const std::filesystem::filesystem_error& e)
+        {
+            if (e.code().value() == ERROR_SHARING_VIOLATION)
+            {
+                std::cout << "Skipped: " << folder << " - Access denied" << std::endl;
+            }
+            else
+            {
+                std::cout << "Error deleting files in folder: " << folder << " - " << e.what() << std::endl;
             }
         }
     }
@@ -63,22 +77,6 @@ int main()
     std::cout << "Is Elevated: " << std::boolalpha << isElevated << std::endl;
 
     DeleteFilesInFolders(tempFolders);
-
-    // Print all processes
-    HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-    if (hSnapshot != INVALID_HANDLE_VALUE)
-    {
-        PROCESSENTRY32 processEntry;
-        processEntry.dwSize = sizeof(PROCESSENTRY32);
-        if (Process32First(hSnapshot, &processEntry))
-        {
-            do
-            {
-                std::wcout << "Skipped files were open due to: " << std::wstring(processEntry.szExeFile, processEntry.szExeFile + wcslen(processEntry.szExeFile)) << std::endl; // Convert to wstring before outputting
-            } while (Process32Next(hSnapshot, &processEntry));
-        }
-        CloseHandle(hSnapshot);
-    }
 
     // Add a pause or wait for user input
     std::cout << "Press any key to exit..." << std::endl;
